@@ -153,6 +153,74 @@ Error responses include a JSON body describing the problem:
 { "error": { "message": "Invalid API key", "type": "authentication_error" } }
 ```
 
+## Python toolkit: `ngen_rag`
+
+This folder ships a small, importable package that turns text into vectors, saves
+them, and runs retrieval-augmented generation on top of `ngen-embeddings-v1`.
+
+```bash
+pip install -r requirements.txt   # requests + numpy
+export TNSA_API_KEY=tnsa_...       # Windows: setx TNSA_API_KEY tnsa_...
+```
+
+**Text → vectors**
+
+```python
+from ngen_rag import EmbeddingClient
+
+client = EmbeddingClient()                       # reads TNSA_API_KEY
+vec = client.embed("The quick brown fox")        # -> list[float]
+mat = client.embed_batch(["a", "b", "c"])        # -> list[list[float]]
+```
+
+**Save vectors + search them**
+
+```python
+from ngen_rag import VectorStore
+
+store = VectorStore()
+store.add(texts=["a", "b"], vectors=mat[:2], metadatas=[{"id": 1}, {"id": 2}])
+store.save("vectors.npz")
+
+store = VectorStore.load("vectors.npz")
+hits = store.search(client.embed("query"), k=3)   # cosine similarity
+for h in hits:
+    print(h.score, h.text, h.metadata)
+```
+
+**RAG (index → retrieve → prompt)**
+
+```python
+from ngen_rag import RAG
+
+rag = RAG()                                       # chunks + embeds for you
+rag.add_texts(["... long document ..."], metadatas=[{"source": "handbook"}])
+rag.save("kb.npz")
+
+rag = RAG.load("kb.npz")
+hits = rag.retrieve("how do refunds work?", k=4)  # top-k chunks
+prompt = rag.build_prompt("how do refunds work?") # context + question, ready to send
+
+# embeddings do retrieval; you generate with any LLM:
+# openai.chat.completions.create(model="gpt-5",
+#     messages=[{"role": "user", "content": prompt}])
+```
+
+See [`example.py`](example.py) for a complete runnable walkthrough.
+
+| Class / fn        | What it does                                                        |
+| ----------------- | ------------------------------------------------------------------ |
+| `EmbeddingClient` | Calls `/v1/embeddings`; `embed()` / `embed_batch()`; retries 429/5xx. |
+| `VectorStore`     | Holds vectors + text + metadata; `add` / `search` / `save` / `load`. |
+| `RAG`             | Chunk → embed → store → `retrieve` / `build_context` / `build_prompt`. |
+| `chunk_text`      | Overlapping character-based chunker.                               |
+
+Errors derive from `EmbeddingsError` (`AuthError`, `BadRequestError`,
+`RateLimitError`, `APIError`).
+
+> The folder name is `embeddings`, but the importable package is `ngen_rag`. Add
+> this folder to your `PYTHONPATH` (or run from inside it), then `import ngen_rag`.
+
 ## Local development
 
 If you're running the service locally, swap the base URL for:
