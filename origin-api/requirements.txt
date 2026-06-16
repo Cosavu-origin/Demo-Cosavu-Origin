@@ -1,0 +1,6 @@
+groq>=1.1
+requests>=2.28
+rich>=13.0
+# Also requires Node.js / npx on PATH to launch @originchain/mcp-server.
+# Tool calling: Groq llama-4 (GenChat's instant model). Final answer: TNSA NGen
+# (api.tnsaai.com/infer). Optimization: the sibling cosavu-api package (cosavu_context).

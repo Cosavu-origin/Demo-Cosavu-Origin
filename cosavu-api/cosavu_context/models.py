@@ -24,6 +24,28 @@ def _extract_compression(notes: Optional[str]) -> Optional[float]:
     return round(float(m.group(1)) / 100.0, 4)
 
 
+def _extract_sampling(notes: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Pull the public sampling parameters the optimizer reported — temperature,
+    top_p and reasoning mode — out of the notes. Internal-only tokens (rewriter,
+    device, …) are deliberately ignored. Returns a dict or ``None``."""
+    if not notes:
+        return None
+    out: Dict[str, Any] = {}
+    t = re.search(r"\btemp=(\d+(?:\.\d+)?)", notes)
+    p = re.search(r"\btop_p=(\d+(?:\.\d+)?)", notes)
+    mode = re.search(r"\bmode=([A-Za-z0-9_-]+)", notes)
+    jepa = re.search(r"jepa_recoverability=(\d+(?:\.\d+)?)%", notes)
+    if t:
+        out["temperature"] = float(t.group(1))
+    if p:
+        out["top_p"] = float(p.group(1))
+    if mode:
+        out["reasoning_mode"] = mode.group(1)
+    if jepa:
+        out["jepa_recoverability"] = round(float(jepa.group(1)) / 100.0, 4)
+    return out or None
+
+
 @dataclass
 class OptimizedContext:
     """A leaner, same-intent version of your prompt, ready to forward to any LLM.
@@ -45,6 +67,7 @@ class OptimizedContext:
     optimized_tokens: int
     latency_ms: float
     compression: Optional[float] = None
+    sampling: Optional[Dict[str, Any]] = None
     raw: Dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
@@ -73,6 +96,7 @@ class OptimizedContext:
             optimized_tokens=int(payload.get("total_optimized_tokens", 0)),
             latency_ms=float(payload.get("latency_ms", 0.0)),
             compression=_extract_compression(payload.get("optimization_notes")),
+            sampling=_extract_sampling(payload.get("optimization_notes")),
             raw={k: v for k, v in payload.items() if k != "optimization_notes"},
         )
 
